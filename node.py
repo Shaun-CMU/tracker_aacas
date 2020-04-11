@@ -15,6 +15,7 @@ import argparse
 
 import cv2
 import torch
+import imutils
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

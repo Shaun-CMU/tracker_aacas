@@ -31,7 +31,10 @@ class Detector():
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = Darknet(self.model_def, img_size=self.img_size).to(device)
-        self.model.load_state_dict(torch.load(self.weights_path))
+        if torch.cuda.is_available():
+            self.model.load_state_dict(torch.load(self.weights_path))
+        else:
+            self.model.load_state_dict(torch.load(self.weights_path, map_location=lambda storage, loc: storage))
 
         self.model.eval()  # Set in evaluation mode
         self.classes = load_classes(self.class_path)  # Extracts class labels from file
@@ -59,7 +62,8 @@ class Detector():
 
         img_detections = []
         with torch.no_grad():
-            x = x.cuda()
+            if torch.cuda.is_available():
+                x = x.cuda()
             detections = self.model(x)
             detections = non_max_suppression(detections, self.conf_thres, self.nms_thres)
             img_detections.extend(detections)
