@@ -19,7 +19,7 @@ import imutils
 
 import rospy
 from std_msgs.msg import String
-from yolov3_pytorch_ros.msg import BoundingBox, BoundingBoxes
+from detect_n_track.msg import BoundingBox, BoundingBoxes
 
 package = RosPack()
 package_path = package.get_path('detect_n_track')
@@ -111,6 +111,8 @@ def detect_n_track():
                 detection_msg.xmax = xmax
                 detection_msg.ymin = ymin
                 detection_msg.ymax = ymax
+                detection_msg.probability = 1
+                detection_msg.Class = tr.idx
 
                 detection_results.bounding_boxes.append(detection_msg)
 
