@@ -19,6 +19,10 @@ import imutils
 
 import rospy
 from std_msgs.msg import String
+from yolov3_pytorch_ros.msg import BoundingBox, BoundingBoxes
+
+package = RosPack()
+package_path = package.get_path('detect_n_track')
 
 
 
@@ -50,7 +54,7 @@ def detect_n_track():
         tracklets = []
         object_id = 0
 
-        for i in range(0, 76):
+        for i in range(0, 50):
             frame = cv2.imread(os.path.join(opt.image_folder, "frame{:04d}.jpg".format(i)))
             if opt.csrt:
                 frame = imutils.resize(frame, width=400)
@@ -91,6 +95,10 @@ def detect_n_track():
                     (x, y, w, h) = tr.getState()
                     x, y, w, h = int(x), int(y), int(w), int(h)
                     cv2.rectangle(frame, (x, y), (x + w, y + h), tr.color, 2)
+                    ymin = y
+                    ymax = y+h
+                    xmin = x
+                    xmax = x+w
 
                 if opt.csrt:
                     (success, csrt_boxes) = trackers.update(frame)
@@ -98,8 +106,17 @@ def detect_n_track():
                 else:
                     tr.predict()
 
-                data_string = str(tr.idx)+str(x)+str(y)+str(w)+str(h)
-                pub.publish(data_string)
+                detection_msg = BoundingBox()
+                detection_msg.xmin = xmin
+                detection_msg.xmax = xmax
+                detection_msg.ymin = ymin
+                detection_msg.ymax = ymax
+
+                detection_results.bounding_boxes.append(detection_msg)
+
+                # data_string = str(tr.idx)+str(x)+str(y)+str(w)+str(h)
+                # pub.publish(data_string)
+                self.pub_.publish(detection_results)
 
             # cv2.imshow("Frame", frame)
             # key = cv2.waitKey(1) & 0xFF
@@ -112,4 +129,3 @@ if __name__ == "__main__":
         detect_n_track()
     except rospy.ROSInterruptException:
         pass
-
