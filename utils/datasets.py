@@ -7,6 +7,7 @@ from PIL import Image
 import torch
 import torch.nn.functional as F
 
+sys.path.append("/home/aacas/torchvision")
 from utils.augmentations import horisontal_flip
 from torch.utils.data import Dataset
 import torchvision.transforms as transforms

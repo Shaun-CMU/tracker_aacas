@@ -5,9 +5,29 @@ import os, sys, glob
 from filterpy.kalman import KalmanFilter
 
 class Tracklet():
-    def __init__(self, idx, label, bbox):
+    """
+    Generate tracklet for object being tracked.
+
+    idx:     Object count (unique, ascending).
+    label:   YOLO class prediction.
+    bbox:    Initialize tracklet state (x, y, w, h) with the 1st YOLO detection.
+    csrt:    Use CSRT tracking.
+
+    active:  Flag indicator of whether object is still present in frame.
+    timeout: Frame counts since object has "left".
+    color:   Random RGB tuple for bounding box.
+
+    kf:   Kalman filter object.
+    kf.x: Kalman state vector = [x, y, w, h, dx, dy, dw, dh, ddx, ddw].
+    kf.z: Kalman measurement vector (YOLO) = [x, y, w, h].
+    kf.u: Kalman control input vector (CSRT) = [x, y, w, h].
+
+    """
+    def __init__(self, idx, label, bbox, csrt=False):
         self.idx = idx
         self.label = label
+        self.csrt = csrt
+
         self.active = True
         self.timeout = 0
         self.color = (np.random.randint(255), np.random.randint(255), np.random.randint(255))
@@ -15,9 +35,6 @@ class Tracklet():
         dt = 1.0 / 30.0 #30fps
         self.kf = KalmanFilter(dim_x=10, dim_z=4)
         self.kf.x = np.array([bbox[0], bbox[1], bbox[2], bbox[3], 0., 0., 0., 0., 0., 0.])[np.newaxis].T
-        # x = [x, y, w, h, dx, dy, dw, dh, ddx, ddy]
-        # z = [x, y, w, h]
-        # u = [x, y, w, h]
 
         self.kf.F = np.array([[1,0,0,0, dt,  0,  0,  0, 0.5*dt**2,         0],
                               [0,1,0,0,  0, dt,  0,  0,         0, 0.5*dt**2],
@@ -34,6 +51,11 @@ class Tracklet():
                               [0,0,1,0,0,0,0,0,0,0],
                               [0,0,0,1,0,0,0,0,0,0]],dtype=float)
 
+        if self.csrt:
+            for i in range(4):
+                self.kf.F[i][i] = 0.
+            self.kf.B = (self.kf.H).T
+
         self.kf.R[2:,2:] *= 0.001 #1
         self.kf.P[4:,4:] *= 1000. #1000 give high uncertainty to the unobservable initial velocities
         self.kf.P *= 10. #10
@@ -42,27 +64,70 @@ class Tracklet():
         self.kf.Q[4:,4:] *= 100 #1000
         self.kf.Q[8:,8:] *= 100
 
-    def predict(self):
-        self.kf.predict()
+    def predict(self, csrt_det=None):
+        """
+        Makes prediction of the current state.
+        If using CSRT, predict state with CSRT bounding box as control input.
+        If otherwise, predict state only using current state estimation.
+
+        Input:  csrt_det = np.array([x, y, w, h])
+        Output: None
+        """
+        if self.csrt:
+            u = np.array(csrt_det)[np.newaxis].T
+            self.kf.predict(u)
+        else:
+            self.kf.predict()
 
     def update(self, yolo_det):
+        """
+        Updates current Kalman state using YOLO bounding box.
+
+        Input:  yolo_det = np.array([x, y, w, h])
+        Output: None
+        """
         bbox = yolo_det[np.newaxis].T
         self.kf.update(bbox)
 
     def getState(self):
+        """
+        Returns current Kalman state.
+
+        Input:  None
+        Output: state = np.array([x, y, w, h])
+        """
         return self.kf.x[:4].squeeze()
 
     def setActive(self, st):
-        # flag indicator for whether tracklet is still active
+        """
+        set flag indicator for whether tracklet is still active.
+
+        Input:  st (bool)
+        Output: None
+        """
         self.active = st
 
     def addTimeout(self):
+        """
+        Increment frame count for tracklet being inactive (not detected).
+        """
         self.timeout += 1
 
     def zeroTimeout(self):
+        """
+        Set inactive frame count to 0 (i.e. Object is detected again).
+        """
         self.timeout = 0
 
 def iou(p, y, th=0.1):
+    """
+    Compute IoU between prediction and detection, in order to associate detection to tracklet.
+
+    Input:  p (prediction) = np.array([x, y, w, h])
+            y (detection)  = np.array([x, y, w, h])
+            th (threshold)
+    Output: IoU > th (bool)
+    """
     #pad reception ranges for small targets
     padx = 100. / ((p[2]+y[2])*0.5)
     pady = 100. / ((p[3]+y[3])*0.5)
@@ -82,65 +147,3 @@ def iou(p, y, th=0.1):
 
     return(o > th)
 
-if __name__ == "__main__":
-    img_root = '/home/szuyu/Downloads/img'
-    txt_root = '/home/szuyu/Downloads/output'
-
-    tracklets = [] #list of active objects
-    object_id = 0
-
-    for i in range(1, 601):
-        #open images and detections
-        txt = open(os.path.join(txt_root, '{:06d}.txt'.format(i)))
-        frame = cv2.imread(os.path.join(img_root, "{:06d}.jpg".format(i)))
-        _, _W, _ = frame.shape
-        frame = imutils.resize(frame, width=400)
-        resize_ratio = 400. / _W
-
-        yolo_boxes = []
-        for ln in txt:
-            st = ln.rstrip().split(",")
-            x, y = float(st[0]), float(st[1])
-            w, h = float(st[2]) - x, float(st[3]) - y
-            yolo_box = np.array([x*resize_ratio, y*resize_ratio, w*resize_ratio, h*resize_ratio, int(st[-1])])
-            yolo_boxes.append(yolo_box)
-
-        for tr in tracklets:
-            tr.setActive(False)
-
-        for yolo_box in yolo_boxes:
-            match = 0
-            for tr in tracklets:
-                if yolo_box[-1] != tr.label:
-                    continue
-
-                if iou(yolo_box[:4], tr.getState()):
-                    tr.update(yolo_box[:4])
-                    match = 1
-                    tr.setActive(True)
-                    break
-
-            if match == 0:
-                #add new tracklet
-                tr = Tracklet(object_id, yolo_box[-1], yolo_box[:-1])
-                tracklets.append(tr)
-                object_id += 1
-
-        for tr in tracklets:
-            if tr.active==False:
-                tr.addTimeout()
-            if tr.timeout > 5:
-                tracklets.remove(tr)
-                continue
-
-            if tr.active:
-                (x, y, w, h) = tr.getState()
-                x, y, w, h = int(x), int(y), int(w), int(h)
-                cv2.rectangle(frame, (x, y), (x + w, y + h), tr.color, 2)
-
-            tr.predict()
-
-        cv2.imshow("Frame", frame)
-        key = cv2.waitKey(1) & 0xFF
-
-cv2.destroyAllWindows()
