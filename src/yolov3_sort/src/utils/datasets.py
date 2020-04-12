@@ -8,10 +8,13 @@ import torch
 import torch.nn.functional as F
 
 sys.path.append("/home/aacas/torchvision")
-from utils.augmentations import horisontal_flip
 from torch.utils.data import Dataset
 import torchvision.transforms as transforms
 
+def horisontal_flip(images, targets):
+    images = torch.flip(images, [-1])
+    targets[:, 2] = 1 - targets[:, 2]
+    return images, targets
 
 def pad_to_square(img, pad_value):
     c, h, w = img.shape

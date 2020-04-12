@@ -1,7 +1,6 @@
 from __future__ import division
 import math
 import time
-import tqdm
 import torch
 import torch.nn as nn
 import torch.nn.functional as F

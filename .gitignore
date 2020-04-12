@@ -1,4 +1,9 @@
-__pycache__
 .git
-weights
-data
+build
+devel
+src/yolov3_sort/weights
+src/yolov3_sort/data
+src/yolov3_sort/src/__pycache__
+src/yolov3_sort/src/*.pyc
+src/yolov3_sort/src/utils/__pycache__
+src/yolov3_sort/src/utils/*.pyc
