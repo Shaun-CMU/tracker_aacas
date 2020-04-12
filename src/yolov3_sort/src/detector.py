@@ -72,10 +72,10 @@ class Detector():
             bboxes = []
             if detections is not None:
                 # Rescale boxes to original image
-                detections = rescale_boxes(detections, self.img_size, frame.shape[:2])
-                unique_labels = detections[:, -1].cpu().unique()
-                n_cls_preds = len(unique_labels)
-                for x1, y1, x2, y2, conf, cls_conf, cls_pred in detections:
+                dets = rescale_boxes(detections, self.img_size, frame.shape[:2]).cpu()
+                #unique_labels = detections[:, -1].cpu().unique()
+                #n_cls_preds = len(unique_labels)
+                for x1, y1, x2, y2, conf, cls_conf, cls_pred in dets:
                     bboxes.append([x1, y1, x2-x1, y2-y1, cls_pred])
 
         return np.array(bboxes)

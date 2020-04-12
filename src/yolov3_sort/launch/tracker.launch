@@ -12,7 +12,8 @@
   <arg name="tracked_objects_topic" default="tracked_objects"/>
 
   <!--Detection confidence-->
-  <arg name="confidence" default="0.5"/>
+  <arg name="confidence" default="0.9"/>
+  <arg name="nms" default="0.1"/>
 
   <!--Node-->
   <node name="tracker_node" pkg="yolov3_sort" type="tracker.py" output="screen" respawn="true">
