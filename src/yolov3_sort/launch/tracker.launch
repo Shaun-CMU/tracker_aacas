@@ -10,6 +10,7 @@
 
   <!--Published topics-->
   <arg name="tracked_objects_topic" default="tracked_objects"/>
+  <arg name="published_image_topic" default="tracker_image"/>
 
   <!--Detection confidence-->
   <arg name="confidence" default="0.9"/>
@@ -23,6 +24,7 @@
     <param name="classes_name" value="$(arg classes_name)"/>
 
     <param name="tracked_objects_topic" value="$(arg tracked_objects_topic)"/>
+    <param name="published_image_topic" value="$(arg published_image_topic)"/>
     <param name="confidence" value="$(arg confidence)"/>
 
   </node>

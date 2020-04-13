@@ -35,6 +35,11 @@ class Tracker():
         classes_name = rospy.get_param('~classes_name', 'custom.names')
         self.class_path = os.path.join(package_path, 'config', classes_name)
 
+        self.class_list = []
+        f = open(self.class_path, "r")
+        for x in f:
+            self.class_list.append(x.rstrip())
+
         self.conf_thres = rospy.get_param('~confidence', 0.9)
         self.nms_thres = rospy.get_param('~nms', 0.1)
         self.img_size = 416
@@ -48,6 +53,7 @@ class Tracker():
                              self.img_size)
 
         self.tracklets = []
+        self.colors = []
         self.object_count = 0
         rospy.loginfo("Loaded Darknet for YOLO object detection.")
 
@@ -58,13 +64,15 @@ class Tracker():
 
         # Define publisher & topics
         self.tracked_objects_topic = rospy.get_param('~tracked_objects_topic')
+        self.published_image_topic = rospy.get_param('~published_image_topic')
+
         self.pub = rospy.Publisher(self.tracked_objects_topic, BoundingBoxes, queue_size=10)
+        self.img_pub = rospy.Publisher(self.published_image_topic, Image, queue_size=10)
         rospy.loginfo("Launched node for object tracking.")
 
         rospy.spin()
 
     def imageCb(self, data):
-        #rospy.loginfo("imageCb")
         try:
             #convert to opencv
             cv_image = self.bridge.imgmsg_to_cv2(data, "rgb8")
@@ -108,31 +116,66 @@ class Tracker():
                 tr = Tracklet(self.object_count, yolo_box[-1], yolo_box[:-1])
                 self.tracklets.append(tr)
                 self.object_count += 1
+                self.colors.append((np.random.randint(0, 255, 3)))
 
         for tr in self.tracklets:
             if tr.active==False:
                 tr.addTimeout()
+
+            #if tr.active:
+            (x, y, w, h) = tr.getState()
+            bbox_msg = BoundingBox()
+            bbox_msg.xmin = x
+            bbox_msg.ymin = y
+            bbox_msg.xmax = x + w
+            bbox_msg.ymax = y + h
+            bbox_msg.label = tr.label
+            bbox_msg.idx = tr.idx
+
             if tr.timeout > 10:
+                bbox_msg.xmin = -1
                 self.tracklets.remove(tr)
+                bboxes.bounding_boxes.append(bbox_msg)
                 continue
 
-            if tr.active:
-                (x, y, w, h) = tr.getState()
-                bbox_msg = BoundingBox()
-                bbox_msg.xmin = x
-                bbox_msg.ymin = y
-                bbox_msg.xmax = x + w
-                bbox_msg.ymax = y + h
-                bbox_msg.label = tr.label
-                bbox_msg.idx = tr.idx
-                bboxes.bounding_boxes.append(bbox_msg)
+            bboxes.bounding_boxes.append(bbox_msg)
+            tr.predict()
 
-        #rospy.loginfo(str(len(yolo_boxes)))
+        #rospy.loginfo(str(self.object_count))
         self.pub.publish(bboxes)
+        self.visualize(bboxes, cv_image)
+        #img_msg = self.bridge.cv2_to_imgmsg(cv_image, "rgb8")
+        #self.img_pub.publish(img_msg)
+
         return True
 
-    def visualize(self, bboxes, img):
-        pass
+    def visualize(self, msg, data):
+        img = data.copy()
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        fontScale = 0.6
+        thickness = 2
+
+        for i in range(len(msg.bounding_boxes)):
+            label = int(msg.bounding_boxes[i].label)
+            x1 = msg.bounding_boxes[i].xmin
+            y1 = msg.bounding_boxes[i].ymin
+            x2 = msg.bounding_boxes[i].xmax
+            y2 = msg.bounding_boxes[i].ymax
+            w, h = x2-x1, y2-y1
+            color = self.colors[msg.bounding_boxes[i].idx]
+
+            cv2.rectangle(img,
+                          (int(x1), int(y1)),
+                          (int(x2), int(y2)),
+                          (color[0], color[1], color[2]), thickness)
+
+            text = self.class_list[label]
+            cv2.putText(img, text,
+                        (int(x1), int(y1)-10),
+                        font, fontScale, (0, 0, 0), thickness, cv2.LINE_AA)
+
+        img_msg = self.bridge.cv2_to_imgmsg(img, "rgb8")
+        self.img_pub.publish(img_msg)
 
 if __name__=="__main__":
     rospy.init_node("tracker_node")
